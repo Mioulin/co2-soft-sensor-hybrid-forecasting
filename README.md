@@ -155,20 +155,6 @@ Input (95)  +  AWGN noise (std=0.1, training only)
 
 Pretrained unsupervised on reconstruction loss, then frozen as a feature extractor.
 
-### Fusion predictions
-
-GRU + Kinetic (Kalman-GC), h=1:
-
-![Fusion GRU h=1](outputs/figures/09_fusion_gru_h01.png)
-
-Transformer + Kinetic (Kalman-GC), h=1:
-
-![Fusion Transformer h=1](outputs/figures/09_fusion_transformer_h01.png)
-
-Fused predictions (purple) are visibly closer to the red observed points
-than either the kinetic prior (orange dashed) or the standalone model (blue dashed).
-
----
 
 ## Results
 
