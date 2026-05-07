@@ -122,8 +122,13 @@ Test run 140207_1:
 
 ![Reconstruction 140207_1](outputs/figures/01_reconstruction_140207_1.png)
 
-The reconstructed profile (blue) closely follows the physical signal while
-sparse red dots confirm alignment with actual measurements.
+### Reconstruction interpretation
+
+### Reconstruction interpretation
+
+These plots show why the task should be treated as a sparse soft-sensing problem rather than a standard fully observed regression task. The model is trained to predict a reconstructed six-point CO₂ profile, but only one point is directly observed at each timestep.
+
+The kinetic prior provides useful physical structure, especially for some absorber points, but it is not equally accurate across the column. The data-driven GRU and Transformer models are therefore evaluated both independently and after point-wise fusion with the kinetic prior.
 
 ---
 
@@ -149,139 +154,6 @@ Input (95)  +  AWGN noise (std=0.1, training only)
 ```
 
 Pretrained unsupervised on reconstruction loss, then frozen as a feature extractor.
-
-### Training loss
-
-![SDAE loss](outputs/figures/02_sdae_loss.png)
-
-The gap between train and val loss reflects distribution shift between training
-runs and the validation run — expected with only 8 pilot-plant sessions.
-
-### Latent space structure
-
-![SDAE latent space](outputs/figures/03_sdae_latent_space.png)
-
-2D PCA of the 16-dimensional latent encoding (colour = time step). Temporal
-continuity in latent space confirms the SDAE captures dynamic process evolution.
-
----
-
-## GRU vs Mini-Transformer
-
-### Training curves
-
-Both models take SDAE-encoded features [batch, 18 timesteps, 16 latent] as input.
-Loss = `full_profile_MSE + 1.0 × observed_mask_MSE`.
-
-GRU, h=1:
-
-![GRU loss h=1](outputs/figures/04_loss_gru_h01.png)
-
-Transformer, h=1:
-
-![Transformer loss h=1](outputs/figures/04_loss_transformer_h01.png)
-
-### Predictions on held-out test run (140207\_1)
-
-GRU, h=1:
-
-![GRU predictions h=1](outputs/figures/05_pred_gru_h01.png)
-
-Transformer, h=1:
-
-![Transformer predictions h=1](outputs/figures/05_pred_transformer_h01.png)
-
-Transformer, h=12:
-
-![Transformer predictions h=12](outputs/figures/05_pred_transformer_h12.png)
-
-Red dots are actual AT400 measurements. Observed-point RMSE is computed
-only at these positions — they are the only ground-truth values in the dataset.
-
-### Prediction scatter (h=1)
-
-![Scatter h=1](outputs/figures/08_scatter_h01.png)
-
-Transformer shows tighter clustering around the diagonal than GRU, particularly
-for lower CO2 concentrations at upper column stages.
-
-### Per-point RMSE (h=1)
-
-![Per-point heatmap](outputs/figures/07_per_point_heatmap.png)
-
-Transformer outperforms GRU at all six sampling points. Both models struggle
-most at Point 6 (column inlet — highest CO2, most dynamic range).
-
-### RMSE vs forecast horizon
-
-![RMSE by horizon](outputs/figures/06_rmse_by_horizon.png)
-
-Key observations:
-
-- **Standalone GRU and Transformer underperform the kinetic prior.** The SDAE
-  distribution shift on val/test limits latent representation quality — expected
-  on a small dataset. However, the models still provide complementary signal
-  that fusion exploits to beat the kinetic prior.
-- **Transformer is consistently better than GRU** across all horizons.
-- **All fused models outperform all standalones**, including the kinetic prior.
-
----
-
-## Fusion: kinetic prior + data-driven model
-
-### Why fusion works even when standalone models are weak
-
-The kinetic prior is strong on average but has systematic biases in certain
-operating regimes. The data-driven model makes different errors at different
-times and locations. Combining them with uncertainty-weighted fusion cancels
-complementary errors.
-
-### Inverse-variance fusion (point-wise)
-
-Fusion weights estimated from validation-set residuals:
-
-```
-var_k[i]  = Var(kinetic[i] - target[i])   on val run
-var_m[i]  = Var(model[i]   - target[i])   on val run
-
-fused[i]  = (kinetic[i] / var_k[i]  +  model[i] / var_m[i])
-            / (1 / var_k[i]  +  1 / var_m[i])
-```
-
-### Kalman + Gaspari-Cohn localization (full 6x6 covariance)
-
-```
-x_fused = x_kinetic + B_loc (B_loc + R_loc)^{-1} (x_model - x_kinetic)
-
-B_loc[i,j] = B[i,j] * GC(|i-j| / L)     L = 2
-R_loc[i,j] = R[i,j] * GC(|i-j| / L)
-```
-
-The Gaspari-Cohn function (fifth-order polynomial, compact support at |i-j| >= 2L)
-suppresses spurious long-range correlations between distant sampling points while
-preserving positive semidefiniteness — standard in ensemble Kalman filtering.
-
-### Gaspari-Cohn localization matrix
-
-![Gaspari-Cohn matrix](outputs/figures/11_gaspari_cohn_matrix.png)
-
-Adjacent sampling points get full correlation weight; points 4+ apart get zero.
-This is physically sensible: CO2 at stage 1 and stage 6 of the absorption column
-are not meaningfully correlated in residual space.
-
-### Fusion weights
-
-GRU:
-
-![Fusion weights GRU](outputs/figures/10_fusion_weights_gru.png)
-
-Transformer:
-
-![Fusion weights Transformer](outputs/figures/10_fusion_weights_transformer.png)
-
-**Point 6 (column inlet):** model weight ≈ 0 — kinetic prior handles the high-CO2
-inlet stage well; the data-driven model contributes little there.
-**Points 1-5:** weights are roughly balanced (~50/50), both sources contribute.
 
 ### Fusion predictions
 
