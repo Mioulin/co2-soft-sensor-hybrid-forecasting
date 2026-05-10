@@ -5,11 +5,13 @@ Inverse-variance fusion (point-wise):
   fused_i = (k_i/var_k_i + m_i/var_m_i) / (1/var_k_i + 1/var_m_i)
 
 Kalman-like covariance fusion with Gaspari-Cohn localization:
-  x_fused = x_k + B(B+R)^{-1}(x_m - x_k)
+  x_fused = x_k + B_loc (B_loc + R_loc)^{-1} (x_m - x_k)
   B_loc = B * GC(rho),  R_loc = R * GC(rho)
 
 Gaspari-Cohn function (fifth-order, compact support at rho>=2):
-  Standard in EnKF/variational assimilation; guarantees positive semidefiniteness.
+  Standard in EnKF/variational assimilation. Preserves positive
+  semidefiniteness when applied to a PSD covariance matrix (Schur product
+  theorem), and damps spurious long-range correlations between sampling points.
   Reference: Chai et al. 2026, eq. 25.
 """
 import numpy as np
@@ -38,6 +40,20 @@ def gaspari_cohn_matrix(n: int = 6, L: float = 2.0) -> np.ndarray:
     return M
 
 
+def localization_matrix(n: int = 6, decay: float = 0.5) -> np.ndarray:
+    """
+    Simple exponential localization matrix: L[i,j] = exp(-decay * |i-j|).
+    Diagonal is 1 by construction; matrix is symmetric.
+    Used in tests and as an alternative to Gaspari-Cohn for pre-localizing
+    B and R before passing to kalman_fusion.
+    """
+    M = np.zeros((n, n))
+    for i in range(n):
+        for j in range(n):
+            M[i, j] = np.exp(-decay * abs(i - j))
+    return M
+
+
 def estimate_residual_variances(pred, target, epsilon=1e-8):
     var = np.var(target - pred, axis=0)
     return np.maximum(var, epsilon)
@@ -62,10 +78,28 @@ def fusion_weights(var_kinetic, var_model, epsilon=1e-8):
     return w_k / s, w_m / s
 
 
+def kalman_fusion(kinetic, model, B, R, reg=1e-6):
+    """
+    Kalman-like fusion with pre-localized covariance matrices.
+    x_fused = x_k + B (B + R)^{-1} (x_m - x_k)
+
+    B and R must already be localized by the caller (e.g. multiplied by
+    localization_matrix() or gaspari_cohn_matrix()). This is the bare
+    Kalman update step.
+    """
+    n = B.shape[0]
+    B_reg = B + reg * np.eye(n)
+    R_reg = R + reg * np.eye(n)
+    K = B_reg @ np.linalg.inv(B_reg + R_reg)
+    return kinetic + (model - kinetic) @ K.T
+
+
 def kalman_fusion_gc(kinetic, model, B, R, L=2.0, reg=1e-6):
     """
-    Kalman-like fusion with Gaspari-Cohn localization.
+    Kalman-like fusion with Gaspari-Cohn localization applied internally.
     x_fused = x_k + B_loc (B_loc + R_loc)^{-1} (x_m - x_k)
+
+    Localization is applied here; pass raw B, R from estimate_residual_covariance.
     """
     GC = gaspari_cohn_matrix(n=6, L=L)
     B_loc = B * GC + reg * np.eye(6)

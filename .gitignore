@@ -1,11 +1,38 @@
+# Python
 __pycache__/
 *.pyc
-*.pth
+*.pyo
+*.pyd
+.pytest_cache/
+
+# OS
 .DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environments
+.env
+.venv/
+venv/
+
+# Generated model artefacts
 outputs/checkpoints/
 outputs/predictions/
-*.pkl
-*.npy
-.pytest_cache/
-*.egg-info/
-.ipynb_checkpoints/
+outputs/fusion/
+
+# Generated binary metrics / scalers / histories
+outputs/metrics/*.pkl
+outputs/metrics/*.npy
+
+# Keep CSV metrics
+!outputs/metrics/*.csv
+
+# Keep generated figures for README/GitHub display
+!outputs/figures/*.png
+
+# Local notes / scratch files
+claude_final_readme_instruction*.txt
+interview_explanation_CO2*.md
+README_updated_CO2.md
+PATCH_SUMMARY.md

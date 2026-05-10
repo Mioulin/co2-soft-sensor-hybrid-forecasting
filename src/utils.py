@@ -15,3 +15,7 @@ def load_scaler(path):
     with open(path, "rb") as f: return pickle.load(f)
 
 def checkpoint_name(arch, horizon): return f"{arch}_h{horizon:02d}.pt"
+
+def inverse_transform_predictions(arr, scaler):
+    """Inverse-transform a scaled (n, 6) array back to CO2 fraction units."""
+    return scaler.inverse_transform(arr)

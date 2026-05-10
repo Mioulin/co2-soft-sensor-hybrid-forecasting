@@ -1,6 +1,7 @@
 """
 Script 04: Evaluate all models on held-out test run (140207_1).
 
+Requires: outputs/checkpoints/sdae.pt, gru_h*.pt, transformer_h*.pt
 Outputs:
   outputs/metrics/results_table.csv  - full comparison table
   outputs/predictions/*.npy          - raw predictions per model/horizon
@@ -20,6 +21,7 @@ from src.data_loading import load_all_runs
 from src.target_reconstruction import reconstruct_targets
 from src.splitting import split_runs
 from src.windowing import build_dataset
+from src.autoencoder import SDAE
 from src.models import build_model
 from src.training import predict, make_loader
 from src.metrics import (
@@ -35,17 +37,33 @@ from src.utils import set_seed, load_scaler, checkpoint_name, inverse_transform_
 set_seed()
 
 print("Loading data...")
-runs     = load_all_runs(cfg.ALL_RUNS)
+runs = load_all_runs(cfg.ALL_RUNS)
 profiles, masks = {}, {}
 for run_id, run_data in runs.items():
     df = run_data["df"]
-    _, obs_mask, y_profile = reconstruct_targets(df["at400_frac"].values, df["label"].values)
+    _, obs_mask, y_profile = reconstruct_targets(
+        df["at400_frac"].values, df["label"].values,
+        kinetic=run_data["kinetic"], method="kinetic_residual",
+    )
     profiles[run_id] = y_profile
     masks[run_id]    = obs_mask
 
 train_runs, val_runs, test_runs = split_runs(runs)
 feat_scaler   = load_scaler(cfg.OUT_METRICS / "feature_scaler.pkl")
 target_scaler = load_scaler(cfg.OUT_METRICS / "target_scaler.pkl")
+
+# Load trained SDAE encoder
+sdae_ckpt = cfg.OUT_CHECKPOINTS / "sdae.pt"
+if not sdae_ckpt.exists():
+    raise FileNotFoundError(
+        f"SDAE checkpoint not found: {sdae_ckpt}\n"
+        "Run scripts/run_pipeline.py (or 02/03) to produce SDAE checkpoint first."
+    )
+sdae = SDAE(n_features=95)  # 89 numeric + 6 one-hot
+sdae.load_state_dict(torch.load(sdae_ckpt, weights_only=True))
+sdae.eval()
+latent_dim = cfg.SDAE_LATENT_DIM
+print(f"  Loaded SDAE -> latent_dim={latent_dim}")
 
 all_results     = []
 per_point_store = {}
@@ -54,12 +72,12 @@ device = torch.device("cpu")
 for h in cfg.HORIZONS:
     print(f"\n--- Horizon h={h} ---")
 
-    # Build test windows
+    # Build test windows using SDAE latent features
     X_te, y_te, m_te, k_te = build_dataset(
         test_runs, profiles, masks, h,
-        feature_scaler=feat_scaler, target_scaler=target_scaler
+        feature_scaler=feat_scaler, target_scaler=target_scaler,
+        sdae_encoder=sdae,
     )
-    # Inverse-transform targets back to fractional CO2 for evaluation
     y_te_real = inverse_transform_predictions(y_te, target_scaler)
     k_te_real = k_te  # kinetic never scaled
 
@@ -82,14 +100,11 @@ for h in cfg.HORIZONS:
             print(f"  Checkpoint not found: {ckpt}, skipping")
             continue
 
-        n_features = X_te.shape[2]
-        model = build_model(arch, n_features, cfg)
+        model = build_model(arch, latent_dim, cfg)
         model.load_state_dict(torch.load(ckpt, weights_only=True))
 
         loader = make_loader(X_te, y_te, m_te, k_te, shuffle=False)
         preds_sc, _, _ = predict(model, loader, device)
-
-        # Inverse-transform to fractional CO2
         preds_real = inverse_transform_predictions(preds_sc, target_scaler)
 
         # Save raw predictions
@@ -101,17 +116,14 @@ for h in cfg.HORIZONS:
 
         all_results.append(compute_all_metrics(preds_real, y_te_real, m_te, arch, h))
 
-        # Per-point metrics (h=1 only for heatmap)
         if h == 1:
             per_point_store[arch] = per_point_metrics(preds_real, y_te_real, m_te)
 
-        # Loss curves
         hist_path = cfg.OUT_METRICS / f"history_{arch}_h{h:02d}.npy"
         if hist_path.exists():
             hist = np.load(hist_path, allow_pickle=True).item()
             plot_loss_curves(hist, arch, h)
 
-        # Prediction plots
         plot_predictions_per_point(preds_real, y_te_real, m_te, arch, h)
         plot_scatter_pred_vs_target(preds_real, y_te_real, arch, h)
 
@@ -121,11 +133,10 @@ for h in cfg.HORIZONS:
 # Summary table
 results_df = pd.DataFrame(all_results)
 results_df.to_csv(cfg.OUT_METRICS / "results_table.csv", index=False)
-print(f"\n=== Results table ===")
+print(f"\n=== Results table (Observed-point RMSE) ===")
 print(results_df.pivot_table(index="label", columns="horizon",
       values="obs_rmse").to_string())
 
-# Plots
 plot_rmse_by_horizon(results_df)
 if per_point_store:
     plot_per_point_rmse_heatmap(per_point_store)

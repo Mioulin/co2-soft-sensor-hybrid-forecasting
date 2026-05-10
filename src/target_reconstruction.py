@@ -4,9 +4,10 @@ Six-point CO2 profile reconstruction.
 Two methods:
   1. kinetic_residual (default, recommended):
      Interpolate residuals r = AT400 - kinetic_prior, then
-     y_profile = kinetic_prior + r_profile
-     Justified: kinetic prior captures ~92% of CO2 variance; residual std
-     is 12x smaller than raw CO2 std => interpolation error is minimal.
+     y_profile = kinetic_prior + r_profile.
+     Residual std is substantially smaller than raw AT400 std (8-16x across
+     runs), making residual interpolation a lower-variance reconstruction
+     target.
 
   2. linear (legacy, not recommended):
      Direct linear interpolation of sparse AT400 observations.
@@ -40,6 +41,10 @@ def _interpolate_channels(arr: np.ndarray) -> np.ndarray:
     return df.values.astype(np.float64)
 
 
+# Public alias used by tests and notebooks.
+interpolate_profile = _interpolate_channels
+
+
 def reconstruct_targets(
     at400_frac: np.ndarray,
     label: np.ndarray,
@@ -54,6 +59,8 @@ def reconstruct_targets(
     y_sparse      : (n, 6) raw sparse observations (NaN where missing)
     observed_mask : (n, 6) binary observation indicator
     y_profile     : (n, 6) reconstructed pseudo-label profile
+                    NOTE: pseudo-label only. Observed-point RMSE is the
+                    primary ground-truth metric.
     """
     y_sparse, observed_mask = build_sparse_target(at400_frac, label)
 
@@ -63,7 +70,7 @@ def reconstruct_targets(
         for t in range(len(at400_frac)):
             pt = int(label[t]) - 1
             r_sparse[t, pt] = at400_frac[t] - kinetic[t, pt]
-        # Interpolate residuals (12x smaller variance than raw CO2)
+        # Interpolate residuals (substantially smaller variance than raw CO2)
         r_profile = _interpolate_channels(r_sparse)
         y_profile = kinetic + r_profile
         # Clip to physically valid range

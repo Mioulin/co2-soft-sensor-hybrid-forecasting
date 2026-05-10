@@ -1,10 +1,11 @@
 """
 Stacked Denoising Autoencoder (SDAE) for process variable compression.
 
-Architecture (89 features -> 16 latent):
-  Encoder: Linear(89->64) -> ReLU -> Dropout -> Linear(64->32) -> ReLU -> Dropout -> Linear(32->16)
-  Decoder: Linear(16->32) -> ReLU -> Linear(32->64) -> ReLU -> Linear(64->89)
+Architecture (95 features -> 16 latent):
+  Encoder: Linear(95->64) -> ReLU -> Dropout -> Linear(64->32) -> ReLU -> Dropout -> Linear(32->16)
+  Decoder: Linear(16->32) -> ReLU -> Linear(32->64) -> ReLU -> Linear(64->95)
 
+Input: 89 numeric process variables + 6 sampling-point one-hot indicators = 95 features.
 During training: Gaussian noise injected at input (AWGN, std=0.1 after normalization).
 This forces the encoder to learn robust, denoised representations.
 
@@ -62,7 +63,7 @@ class SDAE(nn.Module):
             x_noisy = x + torch.randn_like(x) * self.noise_std
         else:
             x_noisy = x
-        z    = self.encode(x_noisy)
+        z     = self.encode(x_noisy)
         x_hat = self.decode(z)
         return x_hat, z
 
@@ -72,11 +73,11 @@ def train_sdae(
     X_train: np.ndarray,
     X_val:   np.ndarray,
     checkpoint_path,
-    epochs: int   = 150,
-    lr: float     = 6.785e-4,
+    epochs: int    = 150,
+    lr: float      = 6.785e-4,
     batch_size: int = 32,
     device = None,
-    verbose: bool = True,
+    verbose: bool  = True,
 ) -> dict:
     """Pretrain SDAE on reconstruction loss (unsupervised)."""
     from torch.utils.data import DataLoader, TensorDataset
@@ -98,30 +99,28 @@ def train_sdae(
 
     for epoch in range(1, epochs + 1):
         model.train()
-        tl = [criterion(model(xb[0])[0], xb[0]).item()
-              for xb in loader_tr
-              if not (opt.zero_grad() or
-                      criterion(model(xb[0].to(device))[0], xb[0].to(device)).backward() or
-                      opt.step())]
-        # Cleaner loop
-        model.train(); train_losses = []
+        train_losses = []
         for (xb,) in loader_tr:
             xb = xb.to(device)
             opt.zero_grad()
             x_hat, _ = model(xb)
             loss = criterion(x_hat, xb)
-            loss.backward(); opt.step()
+            loss.backward()
+            opt.step()
             train_losses.append(loss.item())
 
-        model.eval(); val_losses = []
+        model.eval()
+        val_losses = []
         with torch.no_grad():
             for (xb,) in loader_va:
                 xb = xb.to(device)
                 x_hat, _ = model(xb)
                 val_losses.append(criterion(x_hat, xb).item())
 
-        tl = np.mean(train_losses); vl = np.mean(val_losses)
-        history["train_loss"].append(tl); history["val_loss"].append(vl)
+        tl = np.mean(train_losses)
+        vl = np.mean(val_losses)
+        history["train_loss"].append(tl)
+        history["val_loss"].append(vl)
         if vl < best_val:
             best_val = vl
             torch.save(model.state_dict(), checkpoint_path)
