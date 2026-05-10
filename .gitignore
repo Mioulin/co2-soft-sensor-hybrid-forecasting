@@ -1,32 +1,10 @@
-# Python
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-.pytest_cache/
-
-# OS
 .DS_Store
-
-# Jupyter
-.ipynb_checkpoints/
-
-# Environments
-.env
-.venv/
-venv/
-
-# Generated model artefacts
+*.pt
 outputs/checkpoints/
 outputs/predictions/
 outputs/fusion/
-
-# Generated binary metrics / scalers / histories
-outputs/metrics/*.pkl
-outputs/metrics/*.npy
-
-# Keep CSV metrics
-!outputs/metrics/*.csv
-
-# Keep figures for README/GitHub display
-!outputs/figures/*.png
+*.xlsx
+*.pdf
+PAPER_DIGEST.md
