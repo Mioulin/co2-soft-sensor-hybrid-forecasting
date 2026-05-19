@@ -3,10 +3,7 @@
 
 A compact, reproducible PyTorch pipeline for estimating CO2 concentration profiles
 across a six-stage MEA absorber column from sparse, asynchronous sensor readings.
-Implements kinetic-anchored residual reconstruction, SDAE-based dimensionality
-reduction, GRU and Transformer forecasters, and covariance-weighted fusion with
-Gaspari-Cohn localization — following Chai, Guo & Mercangöz (2026) and extending
-it with multi-horizon evaluation and a strict evaluation discipline.
+This is a partial re-implementation and extension of Chai, Guo & Mercangoz (2026): SDAE-based dimensionality reduction, GRU forecaster, and covariance-weighted fusion with Gaspari-Cohn localization are taken from that work. Two extensions are added: a compact Transformer alternative to the GRU, and multi-horizon evaluation at h in {1, 3, 6, 12}.
 
 ---
 
