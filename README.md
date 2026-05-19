@@ -1,10 +1,7 @@
 # CO2 Soft-Sensor v2
 ## Physics-Informed Hybrid Forecasting for Post-Combustion Carbon Capture
 
-A compact, reproducible PyTorch pipeline for estimating CO2 concentration
-profiles across a six-point MEA absorber column from sparse, asynchronous
-sensor readings. This is a partial re-implementation and extension of
-Chai, Guo & Mercangoz (2026).
+Inspired by and adapted from Chai et al. 2026: SDAE-style dimensionality reduction, GRU forecasting, covariance-weighted fusion, Gaspari-Cohn localization, and a Kalman-style fusion formula. Several hyperparameters are taken from Chai 2026 Tables 1–2, including GRU hidden size, dropout, batch size, learning rate, and training epochs. The implementation differs in important ways: it uses 6 sampling points, 95 input features, a 16-dimensional latent space, frozen SDAE pretraining, and kinetic-anchored residual reconstruction instead of full MHE-generated labels.
 
 **Reproduced from the paper:** SDAE-based dimensionality reduction
 (95 -> 16 latent features), GRU forecaster, covariance-weighted fusion with
