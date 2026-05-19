@@ -514,8 +514,7 @@ my_v2/
 ## Quick start
 
 ```bash
-git clone <your_repo_url>
-cd my_v2
+git clone https://github.com/Mioulin/co2-soft-sensor-hybrid-forecasting
 pip install -r requirements.txt
 
 # Canonical reproduction command - runs all phases and tests
